@@ -7,6 +7,7 @@
 #include <zconf.h>
 #include <cstring>
 #include <pthread.h>
+#include <string>
 #include "get_opt.h"
 
 #define MAX_EVENT_NUMBER 1024
@@ -43,7 +44,7 @@ void AddFd(int epollfd, int fd, bool oneshot) {
 void reset_oneshot(int &epfd, int &fd) {
     struct epoll_event event;
     event.data.fd = fd;
-    event.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
+    event.events = EPOLLIN |EPOLLET | EPOLLONESHOT;
     epoll_ctl(epfd, EPOLL_CTL_MOD, fd, &event);
 }
 
@@ -54,7 +55,9 @@ void *worker(void *arg) {
     char buf[BUFFER_SIZE];
     memset(buf, 0, BUFFER_SIZE);
 
-    while (1) {
+    std::string receive_str="";
+
+    for (;;) {
         int ret = recv(sockfd, buf, BUFFER_SIZE - 1, 0);
         if (ret == 0) {
             close(sockfd);
@@ -63,14 +66,15 @@ void *worker(void *arg) {
         } else if (ret < 0) {
             if (errno = EAGAIN) {
                 reset_oneshot(epollfd, sockfd);
+                printf("full string = %s hello", receive_str.c_str());
                 printf("read later\n");
                 break;
             }
         } else {
-            printf("get content: %s\n", buf);
+            receive_str += buf;
+           // printf("get content: %s\n", buf);
             //Hibernate for 5 seconds to simulate data processing
             printf("worker working...\n");
-            sleep(5);
         }
     }
     printf("end thread receiving data on fd: %d\n", sockfd);
@@ -107,26 +111,21 @@ int main(const int argc, const char **argv) {
 
     AddFd(epollfd, masterSocket, false);
 
-    for(;;){
+    for (;;) {
         int ret = epoll_wait(epollfd, events, MAX_EVENT_NUMBER, -1);  //Permanent Wait
-        if(ret < 0)
-        {
+        if (ret < 0) {
             printf("epoll wait failure!\n");
             break;
         }
         int i;
-        for(i = 0; i < ret; i++)
-        {
+        for (i = 0; i < ret; i++) {
             int sockfd = events[i].data.fd;
-            if(sockfd == masterSocket)
-            {
+            if (sockfd == masterSocket) {
                 struct sockaddr_in slave_address;
                 socklen_t slave_addrlength = sizeof(slave_address);
-                int slaveSocket = accept(masterSocket, (struct sockaddr*)&slave_address, &slave_addrlength);
+                int slaveSocket = accept(masterSocket, (struct sockaddr *) &slave_address, &slave_addrlength);
                 AddFd(epollfd, slaveSocket, true);
-            }
-            else if(events[i].events & EPOLLIN)
-            {
+            } else if (events[i].events & EPOLLIN) {
                 pthread_t thread;
                 struct fds fds_for_new_worker;
                 fds_for_new_worker.epollfd = epollfd;
@@ -134,9 +133,7 @@ int main(const int argc, const char **argv) {
                 /*Start a new worker thread to serve sockfd*/
                 pthread_create(&thread, NULL, worker, &fds_for_new_worker);
 
-            }
-            else
-            {
+            } else {
                 printf("something unexpected happened!\n");
             }
         }
