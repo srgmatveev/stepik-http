@@ -44,7 +44,7 @@ void AddFd(int epollfd, int fd, bool oneshot) {
 void reset_oneshot(int &epfd, int &fd) {
     struct epoll_event event;
     event.data.fd = fd;
-    event.events = EPOLLIN |EPOLLET | EPOLLONESHOT;
+    event.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
     epoll_ctl(epfd, EPOLL_CTL_MOD, fd, &event);
 }
 
@@ -55,7 +55,7 @@ void *worker(void *arg) {
     char buf[BUFFER_SIZE];
     memset(buf, 0, BUFFER_SIZE);
 
-    std::string receive_str="";
+    char *receive_buf = NULL;
 
     for (;;) {
         int ret = recv(sockfd, buf, BUFFER_SIZE - 1, 0);
@@ -66,13 +66,31 @@ void *worker(void *arg) {
         } else if (ret < 0) {
             if (errno = EAGAIN) {
                 reset_oneshot(epollfd, sockfd);
-                printf("full string = %s hello", receive_str.c_str());
-                printf("read later\n");
+                printf("full string = %s\n", receive_buf);
+                //printf("read later\n");
+                if (receive_buf)
+                    free(receive_buf);
                 break;
             }
         } else {
-            receive_str += buf;
-           // printf("get content: %s\n", buf);
+            if (!receive_buf){
+                receive_buf = (char *) malloc(sizeof(char)*ret+1);
+                if(!receive_buf)
+                    perror("malloc receive_buf"), exit(errno);
+                strcpy(receive_buf, buf);
+
+            }
+            else {
+               // printf("ret2 = %s %s aaa%caaa\n",receive_buf ,buf,receive_buf[sizeof(receive_buf)]);
+                char * tmp_buf = static_cast<char *>(realloc(receive_buf, strlen(receive_buf) + ret +1));
+                if(!tmp_buf)
+                    perror("realloc receive_buf"), exit(errno);
+                receive_buf = tmp_buf;
+                strcpy(receive_buf + strlen(receive_buf),buf );
+            }
+
+            //receive_str += buf;
+            // printf("get content: %s\n", buf);
             //Hibernate for 5 seconds to simulate data processing
             printf("worker working...\n");
         }
@@ -105,14 +123,14 @@ int main(const int argc, const char **argv) {
     listen(masterSocket, SOMAXCONN);
 
     struct epoll_event events[MAX_EVENT_NUMBER];
-    int epollfd = epoll_create1(0);
-    if (epollfd == -1)
+    int epfd = epoll_create1(0);
+    if (epfd == -1)
         perror("fail to create epoll\n"), exit(errno);
 
-    AddFd(epollfd, masterSocket, false);
+    AddFd(epfd, masterSocket, false);
 
     for (;;) {
-        int ret = epoll_wait(epollfd, events, MAX_EVENT_NUMBER, -1);  //Permanent Wait
+        int ret = epoll_wait(epfd, events, MAX_EVENT_NUMBER, -1);  //Permanent Wait
         if (ret < 0) {
             printf("epoll wait failure!\n");
             break;
@@ -124,11 +142,11 @@ int main(const int argc, const char **argv) {
                 struct sockaddr_in slave_address;
                 socklen_t slave_addrlength = sizeof(slave_address);
                 int slaveSocket = accept(masterSocket, (struct sockaddr *) &slave_address, &slave_addrlength);
-                AddFd(epollfd, slaveSocket, true);
+                AddFd(epfd, slaveSocket, true);
             } else if (events[i].events & EPOLLIN) {
                 pthread_t thread;
                 struct fds fds_for_new_worker;
-                fds_for_new_worker.epollfd = epollfd;
+                fds_for_new_worker.epollfd = epfd;
                 fds_for_new_worker.sockfd = events[i].data.fd;
                 /*Start a new worker thread to serve sockfd*/
                 pthread_create(&thread, NULL, worker, &fds_for_new_worker);
@@ -140,6 +158,6 @@ int main(const int argc, const char **argv) {
 
     }
     close(masterSocket);
-    close(epollfd);
+    close(epfd);
     return 0;
 }
