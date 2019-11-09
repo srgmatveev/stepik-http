@@ -74,7 +74,7 @@ std::string parse_request(const std::string &for_parse) {
 }
 
 std::string http_error_404() {
-    std::stringstream ss{};
+    std::stringstream ss;
     // Create a result with "HTTP/1.0 404 NOT FOUND"
     ss << "HTTP/1.0 404 NOT FOUND";
     ss << "\r\n";
@@ -87,7 +87,7 @@ std::string http_error_404() {
 }
 
 std::string http_ok_200(const std::string& data) {
-    std::stringstream ss{};
+    std::stringstream ss;
     ss << "HTTP/1.0 200 OK";
     ss << "\r\n";
     ss << "Content-length: ";
