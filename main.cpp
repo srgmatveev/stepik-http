@@ -54,23 +54,19 @@ inline void reset_oneshot(int &epfd, int &fd) {
 }
 
 std::string parse_request(const std::string &for_parse) {
-    std::regex re("GET\\s+/(.*?)\\s+HTTP/1\\.", std::regex::icase);
-    std::smatch match;
-    if (std::regex_search(for_parse, match, re)) {
-        if (match[1].str() == "") {
-            return "index.html";
-        } else {
-            auto pos = match[1].str().find('?');
-            if (pos == std::string::npos)
-                return match[1].str();
-            else
-                return match[1].str().substr(0, pos);
-        }
-    } else {
-        std::cout<<for_parse<<std::endl;
-        printf("reguest header GET url not found\n");
-        return "";
-    }
+
+    std::size_t pos1 = for_parse.find("GET /");
+    std::size_t pos2 = for_parse.find(" HTTP/1");
+    if (pos1 == std::string::npos || pos2 == std::string::npos) return "";
+    std::string ind = for_parse.substr(pos1 + 5, pos2 - pos1 - 5);
+    if (ind.size() == 0) return "index.html";
+
+    auto pos = ind.find('?');
+    if (pos == std::string::npos)
+        return ind;
+    else
+        return ind.substr(0, pos);
+
 }
 
 std::string http_error_404() {
@@ -86,7 +82,7 @@ std::string http_error_404() {
     return ss.str();
 }
 
-std::string http_ok_200(const std::string& data) {
+std::string http_ok_200(const std::string &data) {
     std::stringstream ss;
     ss << "HTTP/1.0 200 OK";
     ss << "\r\n";
@@ -95,7 +91,7 @@ std::string http_ok_200(const std::string& data) {
     ss << "\r\n";
     ss << "Content-Type: text/html";
     ss << "\r\n";
-    ss << "Connection: close\r\n";
+    // ss << "Connection: close\r\n";
     ss << "\r\n";
     ss << data;
     return ss.str();
@@ -114,18 +110,18 @@ inline void f(int &fd, const std::string &request) {
             ss << "/";
         ss << f_name;
 
-        FILE* file_in = fopen(ss.str().c_str(), "r");
+        FILE *file_in = fopen(ss.str().c_str(), "r");
         char arr[1024];
         if (file_in) {
             std::stringstream ss;
             std::string tmp_str;
             char c = '\0';
-            while ((c = fgetc(file_in))!= EOF) {
-                ss <<  c;
+            while ((c = fgetc(file_in)) != EOF) {
+                ss << c;
             }
             tmp_str = ss.str();
-            std::string ok  = http_ok_200(tmp_str);
-            send(fd, ok.c_str(), ok.size() , MSG_NOSIGNAL);
+            std::string ok = http_ok_200(tmp_str);
+            send(fd, ok.c_str(), ok.size(), MSG_NOSIGNAL);
             fclose(file_in);
         } else {
             std::string err = http_error_404();
@@ -167,7 +163,7 @@ void *worker(void *arg) {
     pthread_exit(0);
 }
 
-int run(const int argc, const char **argv){
+int run(const int argc, const char **argv) {
     int masterSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (masterSocket < 0)
         perror("fail to create socket!\n"), exit(errno);
@@ -229,8 +225,7 @@ int run(const int argc, const char **argv){
     return 0;
 }
 
-static void skeleton_daemon()
-{
+static void skeleton_daemon() {
     pid_t pid;
 
     /* Fork off the parent process */
@@ -273,19 +268,18 @@ static void skeleton_daemon()
 
     /* Close all open file descriptors */
     int x;
-    for (x = sysconf(_SC_OPEN_MAX); x>=0; x--)
-    {
-        close (x);
+    for (x = sysconf(_SC_OPEN_MAX); x >= 0; x--) {
+        close(x);
     }
 
     /* Open the log file */
-   // openlog ("firstdaemon", LOG_PID, LOG_DAEMON);
+    // openlog ("firstdaemon", LOG_PID, LOG_DAEMON);
 }
 
 int main(const int argc, const char **argv) {
     skeleton_daemon();
-    while (1) {
-        run(argc, argv);
-    }
+     while (1) {
+    run(argc, argv);
+      }
     return EXIT_SUCCESS;
 }
