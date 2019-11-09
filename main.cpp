@@ -94,6 +94,7 @@ std::string http_ok_200(const std::string& data) {
     ss << "Content-length: ";
     ss << data.size();
     ss << "\r\n";
+    ss << "Connection: close\r\n";
     ss << "Content-Type: text/html";
     ss << "\r\n\r\n";
     ss << data;
@@ -123,11 +124,11 @@ inline void f(int &fd, const std::string &request) {
             }
             tmp_str = ss.str();
             std::string ok  = http_ok_200(tmp_str);
-            send(fd, ok.c_str(), ok.length() , MSG_NOSIGNAL);
+            send(fd, ok.c_str(), ok.size()+1 , MSG_NOSIGNAL);
             file_in.close();
         } else {
             std::string err = http_error_404();
-            send(fd, err.c_str(), err.length() +1, MSG_NOSIGNAL);
+            send(fd, err.c_str(), err.size() +1, MSG_NOSIGNAL);
         }
 
     }
