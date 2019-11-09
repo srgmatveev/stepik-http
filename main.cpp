@@ -283,9 +283,9 @@ static void skeleton_daemon()
 }
 
 int main(const int argc, const char **argv) {
-    //skeleton_daemon();
-    //while (1) {
+    skeleton_daemon();
+    while (1) {
         run(argc, argv);
-    //}
+    }
     return EXIT_SUCCESS;
 }
