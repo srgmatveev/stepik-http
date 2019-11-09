@@ -24,7 +24,7 @@ void display_usage(const char *prg_name) {
     exit(EXIT_FAILURE);
 }
 
-void get_command_line(const int &argc, char **argv, sockaddr_in &s_in, char *serv_dir) {
+void get_command_line(const int &argc, char **argv, sockaddr_in &s_in, std::string& serv_dir) {
     int opt = 0;
     globalArgs.port = 0;
     globalArgs.host = nullptr;
@@ -52,6 +52,6 @@ void get_command_line(const int &argc, char **argv, sockaddr_in &s_in, char *ser
     if(argc<4) {display_usage(argv[0]);exit(1);}
     s_in.sin_addr.s_addr = inet_addr(globalArgs.host);
     s_in.sin_port = htons(globalArgs.port);
-    serv_dir = (char *) globalArgs.dir_name;
+    serv_dir =  globalArgs.dir_name;
 
 }

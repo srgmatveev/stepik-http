@@ -1,5 +1,3 @@
-#include <cstdint>
-#include <sys/ioctl.h>
 #include <fcntl.h>
 #include <netinet/in.h>
 #include <cerrno>
@@ -8,13 +6,18 @@
 #include <cstring>
 #include <pthread.h>
 #include <string>
+#include <regex>
+#include <iostream>
+#include <fstream>
 #include "get_opt.h"
 
+std::string serv_dir{};
 #define MAX_EVENT_NUMBER 1024
 #define BUFFER_SIZE 10
 struct fds {
     int epollfd;
     int sockfd;
+
 };
 
 int set_nonblock(int fd) {
@@ -30,7 +33,7 @@ int set_nonblock(int fd) {
 
 }
 
-void AddFd(int epollfd, int fd, bool oneshot) {
+inline void AddFd(int epollfd, int fd, bool oneshot) {
     struct epoll_event event;
     event.data.fd = fd;
     event.events = EPOLLIN | EPOLLET;
@@ -41,11 +44,90 @@ void AddFd(int epollfd, int fd, bool oneshot) {
     set_nonblock(fd);
 }
 
-void reset_oneshot(int &epfd, int &fd) {
+inline void reset_oneshot(int &epfd, int &fd) {
     struct epoll_event event;
     event.data.fd = fd;
     event.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
     epoll_ctl(epfd, EPOLL_CTL_MOD, fd, &event);
+}
+
+std::string parse_request(const std::string &for_parse) {
+    std::regex re("GET\\s+/(.*?)\\s+HTTP/1\\.0", std::regex::icase);
+    std::smatch match;
+    if (std::regex_search(for_parse, match, re)) {
+        if (match[1].str() == "") {
+            return "index.html";
+        } else {
+            auto pos = match[1].str().find('?');
+            if (pos == std::string::npos)
+                return match[1].str();
+            else
+                return match[1].str().substr(0, pos);
+        }
+    } else {
+        std::cout<<for_parse<<std::endl;
+        printf("reguest header GET url not found\n");
+        return "";
+    }
+}
+
+std::string http_error_404() {
+    std::stringstream ss{};
+    // Create a result with "HTTP/1.0 404 NOT FOUND"
+    ss << "HTTP/1.0 404 NOT FOUND";
+    ss << "\r\n";
+    ss << "Content-length: ";
+    ss << 0;
+    ss << "\r\n";
+    ss << "Content-Type: text/html";
+    ss << "\r\n\r\n";
+    return ss.str();
+}
+
+std::string http_ok_200(const std::string& data) {
+    std::stringstream ss{};
+    ss << "HTTP/1.0 200 OK";
+    ss << "\r\n";
+    ss << "Content-length: ";
+    ss << data.size();
+    ss << "\r\n";
+    ss << "Content-Type: text/html";
+    ss << "\r\n\r\n";
+    ss << data;
+    return ss.str();
+}
+
+inline void f(int &fd, const std::string &request) {
+    std::string f_name = parse_request(request);
+    if (f_name == "") {
+        std::string err = http_error_404();
+        send(fd, err.c_str(), err.length() + 1, MSG_NOSIGNAL);
+        return;
+    } else {
+        std::stringstream ss;
+        ss << serv_dir;
+        if (serv_dir.length() > 0 && serv_dir[serv_dir.length() - 1] != '/')
+            ss << "/";
+        ss << f_name;
+        std::cout << ss.str() << std::endl;
+        std::ifstream file_in(ss.str());
+        if (file_in) {
+            std::stringstream ss;
+            std::string tmp_str;
+
+            while (getline(file_in, tmp_str, '\n')) {
+                ss << tmp_str <<std::endl;
+            }
+            tmp_str = ss.str();
+            std::string ok  = http_ok_200(tmp_str);
+            send(fd, ok.c_str(), ok.length() + 1, MSG_NOSIGNAL);
+            file_in.close();
+        } else {
+            std::string err = http_error_404();
+            send(fd, err.c_str(), err.length() + 1, MSG_NOSIGNAL);
+        }
+
+    }
 }
 
 void *worker(void *arg) {
@@ -53,9 +135,9 @@ void *worker(void *arg) {
     int epollfd = ((struct fds *) arg)->epollfd;
     printf("start new thread to receive data on fd: %d\n", sockfd);
     char buf[BUFFER_SIZE];
-    memset(buf, 0, BUFFER_SIZE);
+    memset(buf, '\0', BUFFER_SIZE);
 
-    char *receive_buf = NULL;
+    std::string receive_buf;
 
     for (;;) {
         int ret = recv(sockfd, buf, BUFFER_SIZE - 1, 0);
@@ -66,33 +148,13 @@ void *worker(void *arg) {
         } else if (ret < 0) {
             if (errno = EAGAIN) {
                 reset_oneshot(epollfd, sockfd);
-                printf("full string = %s\n", receive_buf);
-                //printf("read later\n");
-                if (receive_buf)
-                    free(receive_buf);
+                //  printf("full string = %s\n", receive_buf);
+                f(sockfd, receive_buf);
+
                 break;
             }
         } else {
-            if (!receive_buf){
-                receive_buf = (char *) malloc(sizeof(char)*ret+1);
-                if(!receive_buf)
-                    perror("malloc receive_buf"), exit(errno);
-                strcpy(receive_buf, buf);
-
-            }
-            else {
-               // printf("ret2 = %s %s aaa%caaa\n",receive_buf ,buf,receive_buf[sizeof(receive_buf)]);
-                char * tmp_buf = static_cast<char *>(realloc(receive_buf, strlen(receive_buf) + ret +1));
-                if(!tmp_buf)
-                    perror("realloc receive_buf"), exit(errno);
-                receive_buf = tmp_buf;
-                strcpy(receive_buf + strlen(receive_buf),buf );
-            }
-
-            //receive_str += buf;
-            // printf("get content: %s\n", buf);
-            //Hibernate for 5 seconds to simulate data processing
-            printf("worker working...\n");
+            receive_buf += buf;
         }
     }
     printf("end thread receiving data on fd: %d\n", sockfd);
@@ -104,7 +166,7 @@ int main(const int argc, const char **argv) {
     int masterSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (masterSocket < 0)
         perror("fail to create socket!\n"), exit(errno);
-    char *serv_dir = nullptr;
+
     struct sockaddr_in sock_addr;
     bzero(&sock_addr, sizeof(sock_addr));
     sock_addr.sin_family = AF_INET;
