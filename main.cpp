@@ -125,11 +125,11 @@ inline void f(int &fd, const std::string &request) {
             }
             tmp_str = ss.str();
             std::string ok  = http_ok_200(tmp_str);
-            send(fd, ok.c_str(), ok.size()+1 , MSG_NOSIGNAL);
+            send(fd, ok.c_str(), ok.size() , MSG_NOSIGNAL);
             fclose(file_in);
         } else {
             std::string err = http_error_404();
-            send(fd, err.c_str(), err.size() +1, MSG_NOSIGNAL);
+            send(fd, err.c_str(), err.size(), MSG_NOSIGNAL);
         }
 
     }
