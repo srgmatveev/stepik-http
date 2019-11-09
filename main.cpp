@@ -114,20 +114,20 @@ inline void f(int &fd, const std::string &request) {
         ss << f_name;
         std::cout << ss.str() << std::endl;
         std::ifstream file_in(ss.str());
-        if (file_in) {
+        if (file_in.is_open()) {
             std::stringstream ss;
             std::string tmp_str;
 
-            while (getline(file_in, tmp_str, '\n')) {
-                ss << tmp_str <<std::endl;
+            while (!file_in.eof()) {
+                ss << (char) file_in.get();
             }
             tmp_str = ss.str();
             std::string ok  = http_ok_200(tmp_str);
-            send(fd, ok.c_str(), ok.length() + 1, MSG_NOSIGNAL);
+            send(fd, ok.c_str(), ok.length() , MSG_NOSIGNAL);
             file_in.close();
         } else {
             std::string err = http_error_404();
-            send(fd, err.c_str(), err.length() + 1, MSG_NOSIGNAL);
+            send(fd, err.c_str(), err.length() +1, MSG_NOSIGNAL);
         }
 
     }
@@ -281,9 +281,9 @@ static void skeleton_daemon()
 }
 
 int main(const int argc, const char **argv) {
-    skeleton_daemon();
-    while (1) {
+    //skeleton_daemon();
+    //while (1) {
         run(argc, argv);
-    }
+   // }
     return EXIT_SUCCESS;
 }
