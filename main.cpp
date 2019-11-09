@@ -9,7 +9,6 @@
 #include <string>
 #include <regex>
 #include <iostream>
-#include <fstream>
 #include <signal.h>
 #include <sys/stat.h>
 #include "get_opt.h"
@@ -55,7 +54,7 @@ inline void reset_oneshot(int &epfd, int &fd) {
 }
 
 std::string parse_request(const std::string &for_parse) {
-    std::regex re("GET\\s+/(.*?)\\s+HTTP/1\\.0", std::regex::icase);
+    std::regex re("GET\\s+/(.*?)\\s+HTTP/1\\.", std::regex::icase);
     std::smatch match;
     if (std::regex_search(for_parse, match, re)) {
         if (match[1].str() == "") {
@@ -95,7 +94,9 @@ std::string http_ok_200(const std::string& data) {
     ss << data.size();
     ss << "\r\n";
     ss << "Content-Type: text/html";
-    ss << "\r\n\r\n";
+    ss << "\r\n";
+    ss << "Connection: close\r\n";
+    ss << "\r\n";
     ss << data;
     return ss.str();
 }
@@ -282,9 +283,9 @@ static void skeleton_daemon()
 }
 
 int main(const int argc, const char **argv) {
-    skeleton_daemon();
-    while (1) {
+    //skeleton_daemon();
+    //while (1) {
         run(argc, argv);
-    }
+    //}
     return EXIT_SUCCESS;
 }
