@@ -94,7 +94,6 @@ std::string http_ok_200(const std::string& data) {
     ss << "Content-length: ";
     ss << data.size();
     ss << "\r\n";
-    ss << "Connection: close\r\n";
     ss << "Content-Type: text/html";
     ss << "\r\n\r\n";
     ss << data;
@@ -113,19 +112,20 @@ inline void f(int &fd, const std::string &request) {
         if (serv_dir.length() > 0 && serv_dir[serv_dir.length() - 1] != '/')
             ss << "/";
         ss << f_name;
-        std::cout << ss.str() << std::endl;
-        std::ifstream file_in(ss.str());
-        if (file_in.is_open()) {
+
+        FILE* file_in = fopen(ss.str().c_str(), "r");
+        char arr[1024];
+        if (file_in) {
             std::stringstream ss;
             std::string tmp_str;
-
-            while (!file_in.eof()) {
-                ss << (char) file_in.get();
+            char c = '\0';
+            while ((c = fgetc(file_in))!= EOF) {
+                ss <<  c;
             }
             tmp_str = ss.str();
             std::string ok  = http_ok_200(tmp_str);
             send(fd, ok.c_str(), ok.size()+1 , MSG_NOSIGNAL);
-            file_in.close();
+            fclose(file_in);
         } else {
             std::string err = http_error_404();
             send(fd, err.c_str(), err.size() +1, MSG_NOSIGNAL);
@@ -282,9 +282,9 @@ static void skeleton_daemon()
 }
 
 int main(const int argc, const char **argv) {
-    //skeleton_daemon();
-    //while (1) {
+    skeleton_daemon();
+    while (1) {
         run(argc, argv);
-   // }
+    }
     return EXIT_SUCCESS;
 }
